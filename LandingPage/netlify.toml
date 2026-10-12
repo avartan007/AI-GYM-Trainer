@@ -1,0 +1,15 @@
+[build]
+  publish = "."
+
+[[redirects]]
+  from = "/app"
+  to = "https://ai-gym-trainer.streamlit.app/"
+  status = 302
+  force = true
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "SAMEORIGIN"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
