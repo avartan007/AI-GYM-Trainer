@@ -39,7 +39,12 @@ except Exception:
     WebRtcMode = None
 
 from services.tracking.metrics import sync_metrics_update
-from groq import Groq
+try:
+    from groq import Groq
+except ModuleNotFoundError:
+    # Allow the app to run with the built-in rule-based coach when the
+    # Groq SDK is unavailable in the runtime environment.
+    Groq = None
 from services.coaching.llm import LLMCoach
 from services.coaching.tts import TextToSpeech
 from services.coaching.voice_pipeline import VoicePipeline, autoplay_audio
@@ -88,7 +93,7 @@ def main():
                 api_key = str(st.secrets["GROQ_API_KEY"]).strip()
             
             groq_client = None
-            if api_key:
+            if api_key and Groq is not None:
                 groq_client = Groq(api_key=api_key, timeout=10.0)
                 st.session_state.coach_mode = "Groq LLaMA/Qwen AI"
             else:
