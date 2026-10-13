@@ -34,9 +34,11 @@ from services.ui.style_loader import load_css, inject_local_font, inject_webrtc_
 from services.persistence.exercise_repository import init_db, get_users_exercises, add_exercise
 try:
     from streamlit_webrtc import webrtc_streamer, WebRtcMode
-except Exception:
+    WEBRTC_IMPORT_EXC = None
+except Exception as _webrtc_exc:
     webrtc_streamer = None
     WebRtcMode = None
+    WEBRTC_IMPORT_EXC = _webrtc_exc
 
 from services.tracking.metrics import sync_metrics_update
 try:
@@ -299,9 +301,14 @@ def main():
             )
         elif webrtc_streamer is None or WebRtcMode is None:
             st.warning(
-                "Live camera coaching is unavailable in this environment because the WebRTC dependency is missing or incompatible. "
-                "The workout planner and coaching flow still work without the camera feed."
+                "Live camera coaching is unavailable: the WebRTC dependency "
+                "could not be imported in this environment."
             )
+            if WEBRTC_IMPORT_EXC:
+                st.code(
+                    f"{type(WEBRTC_IMPORT_EXC).__name__}: {WEBRTC_IMPORT_EXC}",
+                    language="text",
+                )
             st.info("Install a compatible `streamlit-webrtc` stack to enable real-time pose tracking.")
         else:
             try:
