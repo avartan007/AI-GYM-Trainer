@@ -3,7 +3,7 @@
 
 [[redirects]]
   from = "/app"
-  to = "https://ai-gym-trainer.streamlit.app/"
+  to = "https://ai-gym-trainer-avartan.streamlit.app/"
   status = 302
   force = true
 
