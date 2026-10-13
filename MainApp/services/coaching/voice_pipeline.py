@@ -1,4 +1,7 @@
+import base64
+import hashlib
 import time
+
 import streamlit as st
 
 
@@ -68,13 +71,18 @@ class VoicePipeline:
 
         now = time.time()
 
-        is_major_issue = event in ["workout_started", "set_completed", "workout_completed"]
+        is_major_issue = event in [
+            "workout_started",
+            "set_completed",
+            "start_next_set",
+            "workout_completed",
+        ]
 
         if not is_major_issue:
             if not issue:
                 return None
             
-            if now - self.last_spoken_at < 5:
+            if now - self.last_spoken_at < 8:
                 return None
             
         text = self.llm.give_feedback(event, issue)
@@ -90,10 +98,23 @@ class VoicePipeline:
         return voice, text
     
 
-def autoplay_audio(audio_bytes):
+def autoplay_audio(audio_bytes, container=None):
+    """Render a hidden, self-contained audio element that autoplays once.
+
+    The markup for a given clip is keyed by a hash of its bytes, so re-rendering
+    it on the frequent automatic reruns is a no-op and does not restart or
+    interrupt playback. Queuing a new clip changes the markup and autoplays it.
+    """
     if not audio_bytes:
         return
-    
-    st.markdown("<style>[data-testid='stAudio'] {display: none;}</style>", unsafe_allow_html=True)
-    
-    st.audio(audio_bytes, format="audio/mp3", autoplay=True)
+
+    encoded = base64.b64encode(audio_bytes).decode("ascii")
+    clip_id = hashlib.md5(audio_bytes).hexdigest()
+    html = (
+        f"<span data-coach-clip='{clip_id}'></span>"
+        f"<audio autoplay='true' style='display:none' "
+        f"src='data:audio/mp3;base64,{encoded}'></audio>"
+    )
+
+    target = container if container is not None else st
+    target.markdown(html, unsafe_allow_html=True)

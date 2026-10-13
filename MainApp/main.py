@@ -1,8 +1,8 @@
 import os
-import platform
 import sys
 import time
 from pathlib import Path
+import platform
 
 # Ensure MainApp directory and repository root are on sys.path
 MAIN_APP_DIR = Path(__file__).resolve().parent
@@ -13,7 +13,12 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(1, str(REPO_ROOT))
 
 # Load environment variables (.env in MainApp or repo root)
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:
+    def load_dotenv(*args, **kwargs):
+        """Allow the app to run when an optional local .env loader is absent."""
+        return False
 env_file = MAIN_APP_DIR / ".env"
 if env_file.exists():
     load_dotenv(env_file)
@@ -39,12 +44,17 @@ from services.coaching.llm import LLMCoach
 from services.coaching.tts import TextToSpeech
 from services.coaching.voice_pipeline import VoicePipeline, autoplay_audio
 
-# PyAV and the OpenCV build pulled in by MediaPipe can load conflicting
-# AVFoundation libraries on macOS. Keep the Streamlit session alive there and
-# let the user use the planner/coaching flow without starting the native camera
-# processor. Streamlit Community Cloud runs Linux, where the camera path remains
-# enabled.
-CAMERA_RUNTIME_SUPPORTED = platform.system() != "Darwin"
+import platform
+
+# Camera support - can be overridden via env var, defaults to True for localhost/deployment
+cam_env = os.environ.get("CAMERA_ENABLED", "").lower()
+if cam_env in ("1", "true", "yes", "on"):
+    CAMERA_RUNTIME_SUPPORTED = True
+elif cam_env in ("0", "false", "no", "off"):
+    CAMERA_RUNTIME_SUPPORTED = False
+else:
+    # Default: enable camera support (works on localhost and Streamlit Cloud/Linux)
+    CAMERA_RUNTIME_SUPPORTED = True
 
   
 def main():
@@ -79,7 +89,7 @@ def main():
             
             groq_client = None
             if api_key:
-                groq_client = Groq(api_key=api_key)
+                groq_client = Groq(api_key=api_key, timeout=10.0)
                 st.session_state.coach_mode = "Groq LLaMA/Qwen AI"
             else:
                 st.session_state.coach_mode = "Built-in Coach"
@@ -130,6 +140,9 @@ def main():
                 st.session_state.workout_started = True
                 st.session_state.set_cycle_started_at = time.time()
                 st.session_state.last_saved_sets_completed = 0
+                st.session_state.workout_completed = False
+                st.session_state.rest_started_at = 0.0
+                st.session_state.next_set_announced = False
 
                 if st.session_state.voice_pipeline:
                     result = st.session_state.voice_pipeline.process_event(
@@ -227,10 +240,13 @@ def main():
     st.title("AI Real-time GYM Coach")
     st.markdown("#### Real-time pose detection with proactive AI voice coaching")
  
+    # Keep a stable slot so queuing a coach line never shifts the WebRTC
+    # component, and keep the clip mounted so the frequent automatic reruns
+    # (every ~0.25s while streaming) do not tear the player down and cut the
+    # speech off mid-sentence.
+    audio_slot = st.empty()
     if st.session_state.get("audio_to_play"):
-        autoplay_audio(st.session_state.audio_to_play)
-        # Clear to prevent audio replaying indefinitely on rapid 250ms reruns
-        st.session_state.audio_to_play = None
+        autoplay_audio(st.session_state.audio_to_play, container=audio_slot)
 
     if st.session_state.get("coach_feedback"):
         st.markdown("")
@@ -284,19 +300,64 @@ def main():
             if VideoProcessorClass is None:
                 st.warning("Camera analysis is unavailable because the video processor could not be initialized.")
             else:
-                context = webrtc_streamer(
-                    key="exercise-analysis",
-                    mode=WebRtcMode.SENDRECV,
-                    video_processor_factory=VideoProcessorClass,
-                    rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
-                    media_stream_constraints={
-                        "video": True,
-                        "audio": False
-                    },
-                    async_processing=True
-                )
+                # More flexible WebRTC config for localhost and deployment
+                rtc_config = {
+                    "iceServers": [
+                        {"urls": ["stun:stun.l.google.com:19302"]},
+                        {"urls": ["stun:stun1.l.google.com:19302"]},
+                        {"urls": ["stun:stun2.l.google.com:19302"]},
+                        {"urls": ["stun:stun3.l.google.com:19302"]},
+                    ]
+                }
+                # Try to use better config for deployment
+                try:
+                    from streamlit_webrtc import RTCConfiguration
+                    rtc_config_obj = RTCConfiguration(iceServers=rtc_config["iceServers"])
+                    rtc_config_arg = rtc_config_obj
+                except Exception:
+                    rtc_config_arg = rtc_config
+
+                try:
+                    context = webrtc_streamer(
+                        key="exercise-analysis",
+                        mode=WebRtcMode.SENDRECV,
+                        video_processor_factory=VideoProcessorClass,
+                        rtc_configuration=rtc_config_arg,
+                        media_stream_constraints={
+                            "video": {
+                                "width": {"min": 640, "ideal": 1280, "max": 1920},
+                                "height": {"min": 480, "ideal": 720, "max": 1080},
+                                "facingMode": "user"
+                            },
+                            "audio": False
+                        },
+                        async_processing=True
+                    )
+                except Exception as webrtc_err:
+                    try:
+                        context = webrtc_streamer(
+                            key="exercise-analysis",
+                            mode=WebRtcMode.SENDRECV,
+                            video_processor_factory=VideoProcessorClass,
+                            rtc_configuration=rtc_config_arg,
+                            media_stream_constraints={
+                                "video": True,
+                                "audio": False
+                            },
+                            async_processing=False
+                        )
+                    except Exception as webrtc_err2:
+                        st.error(f"Camera initialization failed: {webrtc_err}")
+                        st.info("Try refreshing the page or check your browser's camera permissions.")
+                        raise
 
                 sync_metrics_update(context)
+
+                if st.session_state.get("workout_completed"):
+                    # Workout finished: stop the camera and return to the planner.
+                    st.session_state.workout_started = False
+                    time.sleep(0.5)
+                    st.rerun()
 
                 if context.state.playing:
                     time.sleep(0.25)

@@ -37,6 +37,12 @@ class LLMCoach:
                 "Solid set! Take a breath, shake it out, and get ready for the next one.",
                 "Set completed, great pace! Rest briefly and stay focused.",
             ])
+        elif event == "start_next_set":
+            return random.choice([
+                "Rest's over — set up and start your next set now!",
+                "Time to work! Begin your next set with strong, controlled form.",
+                "Break's done. Get into position and start the next set!",
+            ])
         elif event == "no_pose_detected":
             return "Please step back into the camera frame so I can track your movement."
         elif issue:

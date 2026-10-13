@@ -11,7 +11,7 @@ class TextToSpeech:
         
         buffer = BytesIO()
 
-        gTTS(text=cleaned, lang=lang).write_to_fp(buffer)
+        gTTS(text=cleaned, lang=lang, timeout=10).write_to_fp(buffer)
 
         buffer.seek(0)
 
