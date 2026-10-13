@@ -6,6 +6,13 @@ Includes a modern dark-themed **Landing Page** with an interactive pose telemetr
 
 ---
 
+## 🌐 Live Demo
+
+- **Landing Page / Project Site:** [ai-gym-trainer-avartan.netlify.app](https://ai-gym-trainer-avartan.netlify.app)
+- **Web App (Streamlit):** [ai-gym-trainer-avartan.streamlit.app](https://ai-gym-trainer-avartan.streamlit.app)
+
+---
+
 ## 🚀 Key Features
 
 - **Real-Time Pose Landmark Tracking**: Leverages Google MediaPipe's 33-keypoint pose landmark task for sub-35ms joint angle detection.
