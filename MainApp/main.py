@@ -102,12 +102,19 @@ def main():
             llm_coach = LLMCoach(groq_client)
             tts = TextToSpeech()
             st.session_state.voice_pipeline = VoicePipeline(llm_coach, tts)
+            if not tts.available:
+                st.session_state.coach_mode = (
+                    st.session_state.coach_mode + " (text-only)"
+                )
         except Exception as e:
             # Fall back gracefully so voice pipeline never breaks completely
             llm_coach = LLMCoach(None)
             tts = TextToSpeech()
             st.session_state.voice_pipeline = VoicePipeline(llm_coach, tts)
-            st.session_state.coach_mode = "Built-in Coach"
+            if tts.available:
+                st.session_state.coach_mode = "Built-in Coach"
+            else:
+                st.session_state.coach_mode = "Built-in Coach (text-only)"
 
     workout_started = st.session_state.get("workout_started", False)
     
